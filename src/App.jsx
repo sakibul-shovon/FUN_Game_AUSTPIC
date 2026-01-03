@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Cpu, Lock, RotateCcw, Send, ShieldAlert, Terminal, Brain, ArrowRight, Zap, AlertTriangle } from 'lucide-react';
+import { Cpu, Lock, RotateCcw, Send, ShieldAlert, Terminal, Brain, ArrowRight, Zap, Timer, Clock } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-
+// --- IMPORT LOGO ---
 import logo from './assets/logo.jpg'; 
+
+// --- SETTINGS (CUSTOMIZE HERE) ---
+const GUESS_TIMER_SEC = 20; // Number Game: Time per attempt
 
 // --- DATA: RIDDLE QUESTIONS ---
 const RIDDLES = [
@@ -39,7 +42,7 @@ const RIDDLES = [
   { q: "The next prime number after 7?", a: ["11", "Eleven"], hint: "Not 9." },
   { q: "How many ways can you arrange the letters 'ABC'?", a: ["6", "Six"], hint: "3 Factorial (3 x 2 x 1)." },
   { q: "Hexadecimal 'A' equals which decimal number?", a: ["10", "Ten"], hint: "Digits go 0-9, then A-F." },
-  { q: "Evaluate: 1 << 3 (Left Shift)", a: ["8", "Eight"], hint: "Multiplies by 2 three times (1->2->4->8)." },
+  { q: "Evaluate: 1 << 3 (Left Shift)", a: ["8", "Eight"], hint: "Multiplies by 2 three times." },
   { q: "Minimum edges to connect 5 nodes?", a: ["4", "Four"], hint: "N - 1." },
   { q: "Log base 2 of 16?", a: ["4", "Four"], hint: "2 to the power of what is 16?" },
   { q: "The smallest perfect number?", a: ["6", "Six"], hint: "1 + 2 + 3 = 6." },
@@ -50,13 +53,20 @@ const RIDDLES = [
   { q: "How many bits in 2 Bytes?", a: ["16", "Sixteen"], hint: "8 x 2." }
 ];
 
+// --- HELPER: FORMAT SECONDS TO MM:SS ---
+const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
+};
+
 const MainGame = () => {
-  const [activeTab, setActiveTab] = useState('guess'); // 'guess' or 'riddle'
+  const [activeTab, setActiveTab] = useState('guess'); 
 
   return (
     <div className="min-h-screen bg-slate-900 text-cyan-400 font-mono p-4 md:p-6 flex flex-col items-center justify-center relative overflow-hidden selection:bg-cyan-500 selection:text-white">
       
-      {}
+      {/* BACKGROUND */}
       <div className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden flex items-center justify-center">
         <div className="absolute w-[600px] h-[600px] opacity-[0.10]">
             <img src={logo} alt="Background Logo" className="w-full h-full object-contain" />
@@ -66,7 +76,7 @@ const MainGame = () => {
         <div className="absolute w-[1000px] h-[1000px] bg-cyan-900 rounded-full blur-[200px] opacity-20"></div>
       </div>
 
-      {/* HEADER WITH NAVIGATION */}
+      {/* HEADER */}
       <div className="z-20 w-full max-w-4xl flex flex-col md:flex-row items-center justify-between mb-8 gap-4">
           <div className="flex items-center gap-4">
                 <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-cyan-900/50 border-2 border-cyan-500 overflow-hidden shadow-[0_0_15px_rgba(6,182,212,0.5)]">
@@ -78,7 +88,7 @@ const MainGame = () => {
                 </div>
           </div>
 
-          {/* TAB BUTTONS */}
+          {/* TABS */}
           <div className="flex bg-slate-800/80 p-1 rounded-lg border border-cyan-500/30 backdrop-blur-sm">
              <button 
                 onClick={() => setActiveTab('guess')}
@@ -95,7 +105,7 @@ const MainGame = () => {
           </div>
       </div>
 
-      {/* CONTENT AREA */}
+      {/* CONTENT */}
       <AnimatePresence mode='wait'>
         {activeTab === 'guess' ? (
             <GuessGame key="guess" />
@@ -112,6 +122,7 @@ const MainGame = () => {
   );
 };
 
+// --- GUESS GAME (WITH COUNTDOWN TIMER) ---
 const GuessGame = () => {
   const [targetNumber, setTargetNumber] = useState(() => Math.floor(Math.random() * 100) + 1);
   const [guess, setGuess] = useState('');
@@ -120,11 +131,42 @@ const GuessGame = () => {
   const [history, setHistory] = useState([]);
   const [gameState, setGameState] = useState('playing'); 
   const [isShake, setIsShake] = useState(false);
+  
+  // Timer State
+  const [timeLeft, setTimeLeft] = useState(GUESS_TIMER_SEC);
 
+  // Timer Logic
   useEffect(() => {
-    const timer = setTimeout(() => setMessage("ENTER PASSCODE TO HACK"), 1500);
-    return () => clearTimeout(timer);
-  }, []);
+    if (gameState !== 'playing') return;
+
+    const timer = setInterval(() => {
+        setTimeLeft((prev) => {
+            if (prev <= 1) {
+                handleTimeOut();
+                return GUESS_TIMER_SEC; // Reset logic inside handleTimeOut, but return safely
+            }
+            return prev - 1;
+        });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [gameState, attempts]); // Re-run when attempts change
+
+  const handleTimeOut = () => {
+      setMessage("TIMEOUT! ATTEMPT LOST.");
+      setIsShake(true); 
+      setTimeout(() => setIsShake(false), 500);
+      
+      const newAttempts = attempts - 1;
+      setAttempts(newAttempts);
+      
+      if (newAttempts === 0) {
+          setGameState('lost'); 
+          setMessage(`SYSTEM LOCKED. CODE WAS: ${targetNumber}`);
+      } else {
+          setTimeLeft(GUESS_TIMER_SEC); // Reset timer for next life
+      }
+  };
 
   const handleGuess = (e) => {
     e.preventDefault();
@@ -132,6 +174,9 @@ const GuessGame = () => {
 
     const num = parseInt(guess);
     if (isNaN(num)) { setMessage("ERROR: NaN DETECTED."); return; }
+
+    // Logic processed, Reset Timer
+    setTimeLeft(GUESS_TIMER_SEC);
 
     const newHistory = [...history, num];
     setHistory(newHistory);
@@ -156,14 +201,24 @@ const GuessGame = () => {
   const resetGame = () => {
     setTargetNumber(Math.floor(Math.random() * 100) + 1);
     setAttempts(5); setHistory([]); setMessage("SYSTEM REBOOTED."); setGameState('playing'); setGuess('');
+    setTimeLeft(GUESS_TIMER_SEC);
   };
 
   return (
     <motion.div 
         initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-        className={`z-10 w-full max-w-4xl bg-slate-800/90 backdrop-blur-xl border-2 ${isShake ? 'border-red-500' : 'border-cyan-500/50'} rounded-2xl shadow-[0_0_50px_rgba(6,182,212,0.3)] overflow-hidden`}
+        className={`z-10 w-full max-w-4xl bg-slate-800/90 backdrop-blur-xl border-2 ${isShake ? 'border-red-500' : 'border-cyan-500/50'} rounded-2xl shadow-[0_0_50px_rgba(6,182,212,0.3)] overflow-hidden relative`}
     >
-        {/* OLD HEADER DESIGN */}
+        {/* TIMER BAR */}
+        {gameState === 'playing' && (
+            <motion.div 
+                initial={{ width: '100%' }}
+                animate={{ width: `${(timeLeft / GUESS_TIMER_SEC) * 100}%` }}
+                transition={{ duration: 1, ease: "linear" }}
+                className={`absolute top-0 left-0 h-1 z-50 ${timeLeft <= 5 ? 'bg-red-500' : 'bg-cyan-400'}`}
+            />
+        )}
+
         <div className="bg-slate-950 p-6 border-b-2 border-cyan-500/30 flex items-center justify-between">
             <div className="flex items-center gap-5">
                 <div className="w-16 h-16 rounded-full bg-cyan-900/50 flex items-center justify-center border-2 border-cyan-500 overflow-hidden">
@@ -177,19 +232,21 @@ const GuessGame = () => {
                 </div>
             </div>
             <div className="hidden md:flex flex-col items-end">
-                <span className="text-slate-400 text-sm uppercase tracking-widest">Target Range</span>
-                <span className="text-3xl font-bold text-white bg-slate-800 px-4 py-1 rounded border border-cyan-500/30">01 - 100</span>
+                {/* TIMER DISPLAY */}
+                <span className="text-3xl font-black text-white flex items-center gap-2">
+                    <Timer size={24} className={timeLeft <= 5 ? 'text-red-500 animate-spin' : 'text-cyan-400'} /> 
+                    {timeLeft}s
+                </span>
+                <span className="text-slate-500 text-xs tracking-widest">AUTO_FAIL SEQUENCE</span>
             </div>
         </div>
 
-        {/* SCREEN */}
         <div className="p-10 min-h-[250px] flex flex-col justify-center bg-black/60 border-b-2 border-cyan-500/20 relative">
              <p className={`text-3xl md:text-5xl font-bold leading-tight text-center ${gameState === 'lost' ? 'text-red-500' : gameState === 'won' ? 'text-green-400' : 'text-cyan-300'}`}>
                 {message}
              </p>
         </div>
 
-        {/* STATS BAR (BATTERY) */}
         <div className="grid grid-cols-2 gap-px bg-cyan-500/30">
             <div className="bg-slate-900 p-6 flex flex-col items-center">
                 <span className="text-sm text-slate-400 uppercase tracking-widest mb-2">Attempts Remaining</span>
@@ -205,7 +262,6 @@ const GuessGame = () => {
             </div>
         </div>
 
-        {/* INPUT */}
         <div className="p-10 bg-slate-800">
             {gameState === 'playing' ? (
                 <form onSubmit={handleGuess} className="relative">
@@ -228,13 +284,24 @@ const GuessGame = () => {
   );
 };
 
-
+// --- RIDDLE GAME (WITH STOPWATCH) ---
 const RiddleGame = () => {
     const [qIndex, setQIndex] = useState(0);
     const [input, setInput] = useState("");
-    const [status, setStatus] = useState("thinking"); // thinking, correct, failed
+    const [status, setStatus] = useState("thinking");
     const [attemptsLeft, setAttemptsLeft] = useState(3);
     const [shuffledQuestions] = useState(() => [...RIDDLES].sort(() => 0.5 - Math.random()));
+    
+    // Stopwatch State
+    const [elapsedTime, setElapsedTime] = useState(0);
+
+    // Stopwatch Logic (Runs continuously)
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setElapsedTime(prev => prev + 1);
+        }, 1000);
+        return () => clearInterval(timer);
+    }, []);
 
     const currentQ = shuffledQuestions[qIndex];
 
@@ -261,7 +328,7 @@ const RiddleGame = () => {
     const nextQuestion = () => {
         setQIndex((prev) => (prev + 1) % shuffledQuestions.length);
         setStatus("thinking");
-        setAttemptsLeft(3); // Reset attempts
+        setAttemptsLeft(3); 
         setInput("");
     };
 
@@ -275,16 +342,17 @@ const RiddleGame = () => {
                     <span className="text-purple-400 font-bold animate-pulse flex gap-2 items-center text-xl"><Brain /> NEURAL_LINK_TEST</span>
                 </div>
                 <div className="flex flex-col items-end">
-                     <span className="text-slate-400 font-mono text-xs uppercase">Progress</span>
-                     <span className="text-purple-300 font-bold">{qIndex + 1}/{shuffledQuestions.length}</span>
+                     {/* STOPWATCH DISPLAY */}
+                     <span className="text-white font-mono text-xl font-bold flex items-center gap-2">
+                        <Clock size={20} className="text-purple-400" />
+                        {formatTime(elapsedTime)}
+                     </span>
+                     <span className="text-slate-400 font-mono text-xs uppercase">Time Elapsed</span>
                 </div>
             </div>
 
-            {/* Question Display */}
             <div className="p-10 min-h-[250px] flex flex-col items-center justify-center bg-black/40 border-b border-purple-500/20 text-center relative">
                 <p className="text-2xl md:text-4xl font-bold text-white leading-relaxed">"{currentQ.q}"</p>
-                
-                {/* ATTEMPTS INDICATOR */}
                 {status === 'thinking' && (
                     <div className="absolute bottom-4 flex items-center gap-2">
                         <span className="text-slate-500 text-xs font-bold uppercase">Attempts Left:</span>
@@ -295,12 +363,14 @@ const RiddleGame = () => {
                 )}
             </div>
 
-            {/* Input Area */}
             <div className="p-10 bg-slate-800">
                 {status === 'correct' ? (
                     <div className="text-center">
                         <h3 className="text-4xl font-black text-green-400 mb-2">CORRECT!</h3>
                         <p className="text-slate-400 mb-6">Answer: {currentQ.a[0]}</p>
+                        <div className="bg-slate-900 inline-block px-4 py-2 rounded mb-6 border border-purple-500/30">
+                            <span className="text-purple-300">Total Time: {formatTime(elapsedTime)}</span>
+                        </div>
                         <button onClick={nextQuestion} className="w-full py-6 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-bold text-2xl flex items-center justify-center gap-2 transition-all">
                             NEXT CHALLENGE <ArrowRight />
                         </button>
@@ -330,10 +400,13 @@ const RiddleGame = () => {
                     </form>
                 )}
                 
-                {/* HINT SHOWS ON LAST ATTEMPT */}
                 {status === 'thinking' && attemptsLeft === 1 && (
                      <p className="text-center text-yellow-400 font-bold mt-4 animate-bounce">💡 HINT: {currentQ.hint}</p>
                 )}
+            </div>
+            
+            <div className="bg-slate-900 p-2 text-center border-t border-purple-500/20">
+                 <span className="text-purple-500 font-bold text-sm">Progress: {qIndex + 1} / {shuffledQuestions.length}</span>
             </div>
         </motion.div>
     );
