@@ -1,5 +1,5 @@
 #  AUST PIC - Guess or Regret
-
+#Link : https://fungame-weld.vercel.app/
 A cyberpunk-themed interactive web game built for the **AUST Programming and Informatics Club** fair stall. This app features a "Hacker" style UI to engage students with logic puzzles and games.
 
 ##  Game Modes
